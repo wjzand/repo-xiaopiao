@@ -12,6 +12,11 @@ import {
   Clock,
   ChevronRight,
   Trash2,
+  TrendingUp,
+  TrendingDown,
+  Sparkles,
+  AlertTriangle,
+  ShoppingCart,
 } from 'lucide-react';
 import { useAppStore } from '@/store';
 import { CATEGORY_LABELS } from '@/constants/shelfLife';
@@ -21,10 +26,14 @@ import {
   getRemainingDays,
   STATUS_CONFIG,
   addDays,
+  getDaysBetween,
+  getTodayStr,
 } from '@/utils/date';
-import { Product, ProductCategory } from '@/types';
+import { Product, ProductCategory, ConsumptionAnalysis } from '@/types';
 import PageHeader from '@/components/PageHeader';
 import ConfirmDialog from '@/components/ConfirmDialog';
+import LineChart from '@/components/LineChart';
+import { getProductConsumptionAnalysis } from '@/utils/consumption';
 
 type EditableField =
   | 'name'
@@ -111,8 +120,28 @@ export default function ProductDetailPage() {
   const getProductWithReceipt = useAppStore((state) => state.getProductWithReceipt);
   const updateProduct = useAppStore((state) => state.updateProduct);
   const getReceiptById = useAppStore((state) => state.getReceiptById);
+  const products = useAppStore((s) => s.products);
+  const receipts = useAppStore((s) => s.receipts);
 
   const product = useMemo(() => (id ? getProductWithReceipt(id) : undefined), [id, getProductWithReceipt]);
+
+  const consumption = useMemo<ConsumptionAnalysis | null>(() => {
+    if (!product) {
+      return null;
+    }
+    return getProductConsumptionAnalysis(product.name, products, receipts);
+  }, [product, products, receipts]);
+
+  const purchaseChart = useMemo(() => {
+    if (!consumption || consumption.purchaseHistory.length < 2) {
+      return null;
+    }
+    const history = consumption.purchaseHistory.slice(-8);
+    return {
+      labels: history.map((h) => h.date.slice(5)),
+      values: history.map((h) => h.quantity),
+    };
+  }, [consumption]);
 
   const [editingField, setEditingField] = useState<EditableField | null>(null);
   const [editValue, setEditValue] = useState<string>('');
@@ -286,6 +315,20 @@ export default function ProductDetailPage() {
     }
   };
 
+  const daysUntilFinish = consumption?.estimatedFinishDate
+    ? getDaysBetween(getTodayStr(), consumption.estimatedFinishDate)
+    : null;
+
+  const expiryVsConsumption = consumption?.estimatedFinishDate
+    ? (() => {
+        const eDays = getDaysBetween(getTodayStr(), product.expiryDate);
+        const cDays = daysUntilFinish ?? 999;
+        if (eDays < cDays) return 'expireFirst' as const;
+        if (eDays > cDays + 7) return 'consumeFirst' as const;
+        return 'ok' as const;
+      })()
+    : null;
+
   return (
     <div className="app-container flex flex-col min-h-screen">
       <PageHeader title="商品详情" showBack />
@@ -331,6 +374,129 @@ export default function ProductDetailPage() {
             />
           </div>
         </div>
+
+        {consumption && (
+          <div className="px-4 py-3">
+            <div className="text-xs font-semibold text-gray-400 uppercase tracking-wider px-1 mb-3 flex items-center gap-1.5">
+              <Sparkles size={12} />
+              智能消耗分析
+            </div>
+
+            <div className="bg-white rounded-2xl p-4 shadow-sm">
+              <div className="grid grid-cols-2 gap-3">
+                <div className="bg-gradient-to-br from-emerald-50 to-teal-50 rounded-xl p-3">
+                  <div className="flex items-center gap-1.5 mb-1">
+                    <TrendingUp size={12} className="text-emerald-600" />
+                    <span className="text-[11px] text-emerald-700 font-medium">
+                      平均消耗周期
+                    </span>
+                  </div>
+                  <p className="text-lg font-bold text-emerald-900 mt-0.5">
+                    {consumption.avgConsumptionCycleDays != null
+                      ? `${consumption.avgConsumptionCycleDays} 天`
+                      : '数据积累中'}
+                  </p>
+                </div>
+                <div className="bg-gradient-to-br from-sky-50 to-blue-50 rounded-xl p-3">
+                  <div className="flex items-center gap-1.5 mb-1">
+                    <ShoppingCart size={12} className="text-sky-600" />
+                    <span className="text-[11px] text-sky-700 font-medium">
+                      历史购买
+                    </span>
+                  </div>
+                  <p className="text-lg font-bold text-sky-900 mt-0.5">
+                    {consumption.purchaseHistory.length} 次
+                  </p>
+                </div>
+                <div className="bg-gradient-to-br from-violet-50 to-purple-50 rounded-xl p-3 col-span-2">
+                  <div className="flex items-center justify-between mb-1">
+                    <div className="flex items-center gap-1.5">
+                      <Clock size={12} className="text-violet-600" />
+                      <span className="text-[11px] text-violet-700 font-medium">
+                        预计消耗完
+                      </span>
+                    </div>
+                    {daysUntilFinish != null && daysUntilFinish <= 5 && (
+                      <span className="text-[10px] text-amber-600 font-bold bg-amber-100 px-2 py-0.5 rounded-full">
+                        即将用完
+                      </span>
+                    )}
+                  </div>
+                  <div className="flex items-end justify-between mt-1">
+                    <div>
+                      <p className="text-lg font-bold text-violet-900">
+                        {consumption.estimatedFinishDate
+                          ? formatCNDate(consumption.estimatedFinishDate)
+                          : consumption.lastPurchaseDate && consumption.avgConsumptionCycleDays
+                          ? formatCNDate(
+                              addDays(
+                                consumption.lastPurchaseDate,
+                                consumption.avgConsumptionCycleDays
+                              )
+                            )
+                          : '数据积累中'}
+                      </p>
+                      {daysUntilFinish != null && (
+                        <p className="text-[11px] text-violet-600 mt-0.5">
+                          还有 <span className="font-bold">{Math.max(0, daysUntilFinish)} 天</span>
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                  {expiryVsConsumption === 'expireFirst' && (
+                    <div className="mt-3 flex items-start gap-2 bg-gradient-to-r from-orange-50 to-red-50 border border-orange-100 rounded-xl p-2.5 animate-pulse-soft">
+                      <AlertTriangle size={14} className="text-orange-500 flex-shrink-0 mt-0.5" />
+                      <p className="text-xs text-orange-700 leading-snug">
+                        到期前可能消耗不完，建议加速食用或减少采购量
+                      </p>
+                    </div>
+                  )}
+                  {expiryVsConsumption === 'consumeFirst' && remaining > 0 && (
+                    <div className="mt-3 flex items-start gap-2 bg-gradient-to-r from-green-50 to-emerald-50 border border-green-100 rounded-xl p-2.5">
+                      <span className="text-green-500 flex-shrink-0 mt-0.5 text-lg">✓</span>
+                      <p className="text-xs text-green-700 leading-snug">
+                        预计消耗完日期早于到期日，无需担心浪费
+                      </p>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {consumption.purchaseHistory.length >= 2 && (
+                <div className="mt-4">
+                  <p className="text-xs text-gray-500 mb-3 font-medium flex items-center gap-1">
+                    <TrendingDown size={12} />
+                    近 {Math.min(consumption.purchaseHistory.length, 8)} 次购买数量趋势
+                  </p>
+                  {purchaseChart && (
+                    <LineChart data={purchaseChart} yUnit="件" height={140} />
+                  )}
+                  <div className="flex items-center gap-2 mt-3 pt-3 border-t border-gray-100 flex-wrap">
+                    {consumption.purchaseHistory.slice(-4).map((h, i) => (
+                      <div
+                        key={i}
+                        className="flex items-center gap-1.5 text-[11px] text-gray-500 bg-gray-50 px-2 py-1 rounded-lg"
+                      >
+                        <span>{h.date.slice(5)}</span>
+                        <span className="text-gray-700 font-medium">×{h.quantity}件</span>
+                        <span className="text-primary-600 font-bold">¥{h.unitPrice.toFixed(2)}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {consumption.purchaseHistory.length < 2 && (
+                <div className="mt-4 py-6 text-center bg-gray-50 rounded-xl">
+                  <p className="text-xs text-gray-400">
+                  <Sparkles size={14} className="inline mr-1" />
+                  再买几次即可获得消耗分析更准确
+                  </p>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
 
         <div className="px-4 py-3 space-y-3">
           <div className="text-xs font-semibold text-gray-400 uppercase tracking-wider px-1">

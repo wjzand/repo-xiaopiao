@@ -111,3 +111,9 @@ export function getThisMonthRange(): { start: string; end: string } {
     end: formatDate(end),
   };
 }
+
+export function addMonths(dateStr: string, months: number): string {
+  const d = parseDate(dateStr);
+  d.setMonth(d.getMonth() + months);
+  return formatDate(d);
+}

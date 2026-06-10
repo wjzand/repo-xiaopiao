@@ -7,7 +7,8 @@ interface ConfirmDialogProps {
   message: string;
   confirmText?: string;
   cancelText?: string;
-  variant?: 'default' | 'danger';
+  variant?: 'default' | 'danger' | 'success';
+  customContent?: React.ReactNode;
   onConfirm: () => void;
   onCancel: () => void;
 }
@@ -19,6 +20,7 @@ export default function ConfirmDialog({
   confirmText = '确认',
   cancelText = '取消',
   variant = 'default',
+  customContent,
   onConfirm,
   onCancel,
 }: ConfirmDialogProps) {
@@ -48,7 +50,8 @@ export default function ConfirmDialog({
         </button>
         <h3 className="text-lg font-bold text-gray-900 mb-2">{title}</h3>
         <p className="text-sm text-gray-600 leading-relaxed mb-6">{message}</p>
-        <div className="flex gap-3">
+        {customContent}
+        <div className="flex gap-3 mt-6">
           <button
             onClick={onCancel}
             className="flex-1 py-3 rounded-full font-medium bg-gray-100 text-gray-700 active:scale-95 transition-all"
@@ -60,6 +63,8 @@ export default function ConfirmDialog({
             className={`flex-1 py-3 rounded-full font-semibold text-white active:scale-95 transition-all ${
               variant === 'danger'
                 ? 'bg-red-500 hover:bg-red-600'
+                : variant === 'success'
+                ? 'bg-gradient-to-r from-emerald-500 to-teal-500'
                 : 'bg-gradient-to-r from-primary-500 to-primary-400'
             }`}
           >

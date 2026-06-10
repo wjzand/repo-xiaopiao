@@ -1,7 +1,7 @@
 import { Camera, FileText, Package, Leaf } from 'lucide-react';
 
 interface EmptyStateProps {
-  type: 'home' | 'receipts' | 'products' | 'search';
+  type: 'home' | 'receipts' | 'products' | 'search' | 'shopping';
   onAction?: () => void;
 }
 
@@ -34,6 +34,13 @@ export default function EmptyState({ type, onAction }: EmptyStateProps) {
       title: '没有找到相关商品',
       desc: '试试其他关键词',
       actionText: undefined,
+    },
+    shopping: {
+      icon: FileText,
+      iconBg: 'bg-sky-100 text-sky-500',
+      title: '还没有采购清单',
+      desc: '创建清单开始规划采购，智能推荐即将用完的商品',
+      actionText: '创建清单',
     },
   };
 

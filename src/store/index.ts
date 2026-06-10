@@ -1,13 +1,35 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
-import { Product, ProductWithReceipt, Receipt, Settings, ShelfLifeItem } from '@/types';
+import {
+  Product,
+  ProductWithReceipt,
+  Receipt,
+  Settings,
+  ShelfLifeItem,
+  ShoppingList,
+  ShoppingListItem,
+  MonthlyStats,
+  ConsumptionAnalysis,
+  PurchaseRecommendation,
+  ProductCategory,
+} from '@/types';
 import { SHELF_LIFE_DEFAULTS } from '@/constants/shelfLife';
-import { createSampleData } from '@/utils/common';
+import { createSampleData, generateUUID, createReceipt, createProductFromRandom, RandomProductResult } from '@/utils/common';
 import {
   getExpiryStatus,
   getRemainingDays,
   getTodayStr,
+  getMonthKey,
+  addDays,
 } from '@/utils/date';
+import {
+  calculateMonthlyStats,
+  generatePurchaseRecommendations,
+  getLowStockProducts,
+  getProductConsumptionAnalysis,
+  getThisMonthSpent,
+} from '@/utils/consumption';
+import { matchShelfLife } from '@/utils/shelfLife';
 
 interface AppState {
   receipts: Receipt[];
@@ -15,6 +37,7 @@ interface AppState {
   shelfLifeDefaults: ShelfLifeItem[];
   settings: Settings;
   reminderBannerDate: string | null;
+  shoppingLists: ShoppingList[];
 
   initSampleData: () => void;
   addReceipt: (receipt: Receipt, products: Product[]) => void;
@@ -41,10 +64,28 @@ interface AppState {
   removeShelfLifeItem: (keyword: string) => void;
 
   clearAllData: () => void;
+
+  createShoppingList: (name: string, budgetLimit?: number) => ShoppingList;
+  updateShoppingList: (listId: string, updates: Partial<ShoppingList>) => void;
+  deleteShoppingList: (listId: string) => void;
+  getShoppingListById: (id: string) => ShoppingList | undefined;
+  addShoppingListItem: (listId: string, item: Omit<ShoppingListItem, 'id'>) => void;
+  updateShoppingListItem: (listId: string, itemId: string, updates: Partial<ShoppingListItem>) => void;
+  removeShoppingListItem: (listId: string, itemId: string) => void;
+  toggleShoppingItemPurchased: (listId: string, itemId: string) => void;
+  completeShoppingList: (listId: string, storeName?: string) => { receipt: Receipt; products: Product[] } | null;
+
+  getPurchaseRecommendations: () => PurchaseRecommendation[];
+  getProductConsumption: (productName: string) => ConsumptionAnalysis | null;
+  getLowStockList: () => ConsumptionAnalysis[];
+  getMonthlyStats: (monthKey?: string) => MonthlyStats;
+  getThisMonthBudgetSpent: () => number;
+  getThisMonthBudgetRemaining: () => number;
 }
 
 const INITIAL_SETTINGS: Settings = {
   reminderDays: 3,
+  monthlyBudget: 2000,
 };
 
 const { receipts: sampleReceipts, products: sampleProducts } = createSampleData();
@@ -57,6 +98,7 @@ export const useAppStore = create<AppState>()(
       shelfLifeDefaults: SHELF_LIFE_DEFAULTS,
       settings: INITIAL_SETTINGS,
       reminderBannerDate: null,
+      shoppingLists: [],
 
       initSampleData: () => {
         const { receipts, products } = createSampleData();
@@ -187,7 +229,174 @@ export const useAppStore = create<AppState>()(
           receipts: [],
           products: [],
           reminderBannerDate: null,
+          shoppingLists: [],
         });
+      },
+
+      createShoppingList: (name, budgetLimit) => {
+        const list: ShoppingList = {
+          id: generateUUID(),
+          name,
+          items: [],
+          status: 'active',
+          budgetLimit,
+          createdAt: new Date().toISOString(),
+        };
+        set((state) => ({
+          shoppingLists: [list, ...state.shoppingLists],
+        }));
+        return list;
+      },
+
+      updateShoppingList: (listId, updates) => {
+        set((state) => ({
+          shoppingLists: state.shoppingLists.map((l) =>
+            l.id === listId ? { ...l, ...updates } : l
+          ),
+        }));
+      },
+
+      deleteShoppingList: (listId) => {
+        set((state) => ({
+          shoppingLists: state.shoppingLists.filter((l) => l.id !== listId),
+        }));
+      },
+
+      getShoppingListById: (id) => get().shoppingLists.find((l) => l.id === id),
+
+      addShoppingListItem: (listId, itemData) => {
+        const item: ShoppingListItem = {
+          id: generateUUID(),
+          isPurchased: false,
+          ...itemData,
+        };
+        set((state) => ({
+          shoppingLists: state.shoppingLists.map((l) =>
+            l.id === listId ? { ...l, items: [...l.items, item] } : l
+          ),
+        }));
+      },
+
+      updateShoppingListItem: (listId, itemId, updates) => {
+        set((state) => ({
+          shoppingLists: state.shoppingLists.map((l) =>
+            l.id === listId
+              ? {
+                  ...l,
+                  items: l.items.map((it) =>
+                    it.id === itemId ? { ...it, ...updates } : it
+                  ),
+                }
+              : l
+          ),
+        }));
+      },
+
+      removeShoppingListItem: (listId, itemId) => {
+        set((state) => ({
+          shoppingLists: state.shoppingLists.map((l) =>
+            l.id === listId
+              ? { ...l, items: l.items.filter((it) => it.id !== itemId) }
+              : l
+          ),
+        }));
+      },
+
+      toggleShoppingItemPurchased: (listId, itemId) => {
+        set((state) => ({
+          shoppingLists: state.shoppingLists.map((l) =>
+            l.id === listId
+              ? {
+                  ...l,
+                  items: l.items.map((it) =>
+                    it.id === itemId
+                      ? {
+                          ...it,
+                          isPurchased: !it.isPurchased,
+                          actualPrice: it.isPurchased ? undefined : it.estimatedPrice,
+                        }
+                      : it
+                  ),
+                }
+              : l
+          ),
+        }));
+      },
+
+      completeShoppingList: (listId, customStoreName) => {
+        const state = get();
+        const list = state.shoppingLists.find((l) => l.id === listId);
+        if (!list) return null;
+
+        const purchasedItems = list.items.filter((it) => it.isPurchased);
+        if (purchasedItems.length === 0) return null;
+
+        const tempReceiptId = 'temp';
+        const today = getTodayStr();
+        const storeName = customStoreName ?? list.targetStoreName ?? list.name ?? '购物';
+
+        const products: Product[] = purchasedItems.map((it) => {
+          const matched = matchShelfLife(it.name);
+          const price = it.actualPrice ?? it.estimatedPrice;
+          return createProductFromRandom(
+            {
+              name: it.name,
+              category: it.category,
+              quantity: it.quantity,
+              unitPrice: price,
+              productionDate: today,
+              shelfLifeDays: matched.days,
+            } as RandomProductResult,
+            tempReceiptId
+          );
+        });
+
+        const receipt = createReceipt(storeName, today, products);
+        products.forEach((p) => (p.receiptId = receipt.id));
+
+        set((s) => ({
+          receipts: [receipt, ...s.receipts],
+          products: [...products, ...s.products],
+          shoppingLists: s.shoppingLists.map((l) =>
+            l.id === listId
+              ? { ...l, status: 'completed', completedAt: new Date().toISOString() }
+              : l
+          ),
+        }));
+
+        return { receipt, products };
+      },
+
+      getPurchaseRecommendations: () => {
+        const { products, receipts, settings } = get();
+        return generatePurchaseRecommendations(products, receipts, settings.reminderDays);
+      },
+
+      getProductConsumption: (productName) => {
+        const { products, receipts } = get();
+        return getProductConsumptionAnalysis(productName, products, receipts);
+      },
+
+      getLowStockList: () => {
+        const { products, receipts } = get();
+        return getLowStockProducts(products, receipts, 3);
+      },
+
+      getMonthlyStats: (monthKey) => {
+        const key = monthKey ?? getMonthKey(getTodayStr());
+        const { products, receipts } = get();
+        return calculateMonthlyStats(key, products, receipts);
+      },
+
+      getThisMonthBudgetSpent: () => {
+        const { receipts } = get();
+        return getThisMonthSpent(receipts);
+      },
+
+      getThisMonthBudgetRemaining: () => {
+        const { settings } = get();
+        const spent = get().getThisMonthBudgetSpent();
+        return Math.max(0, settings.monthlyBudget - spent);
       },
     }),
     {
@@ -198,6 +407,7 @@ export const useAppStore = create<AppState>()(
         shelfLifeDefaults: state.shelfLifeDefaults,
         settings: state.settings,
         reminderBannerDate: state.reminderBannerDate,
+        shoppingLists: state.shoppingLists,
       }),
       onRehydrateStorage: () => {
         return (state) => {

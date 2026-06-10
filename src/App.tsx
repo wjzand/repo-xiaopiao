@@ -10,6 +10,9 @@ import ScanPage from '@/pages/ScanPage';
 import ManualEntryPage from '@/pages/ManualEntryPage';
 import SettingsPage from '@/pages/SettingsPage';
 import ShelfLifePage from '@/pages/ShelfLifePage';
+import ShoppingListsPage from '@/pages/ShoppingListsPage';
+import ShoppingEditPage from '@/pages/ShoppingEditPage';
+import StatsPage from '@/pages/StatsPage';
 
 function AppLayout() {
   const location = useLocation();
@@ -28,6 +31,9 @@ function AppLayout() {
         <Route path="/manual" element={<ManualEntryPage />} />
         <Route path="/settings" element={<SettingsPage />} />
         <Route path="/shelf-life" element={<ShelfLifePage />} />
+        <Route path="/shopping-lists" element={<ShoppingListsPage />} />
+        <Route path="/shopping/:id" element={<ShoppingEditPage />} />
+        <Route path="/stats" element={<StatsPage />} />
       </Routes>
       {showNav && <BottomNav />}
     </div>
