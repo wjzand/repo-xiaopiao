@@ -123,7 +123,10 @@ export default function ProductDetailPage() {
   const products = useAppStore((s) => s.products);
   const receipts = useAppStore((s) => s.receipts);
 
-  const product = useMemo(() => (id ? getProductWithReceipt(id) : undefined), [id, getProductWithReceipt]);
+  const product = useMemo(
+    () => (id ? getProductWithReceipt(id) : undefined),
+    [id, getProductWithReceipt, products, receipts]
+  );
 
   const consumption = useMemo<ConsumptionAnalysis | null>(() => {
     if (!product) {

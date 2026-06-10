@@ -369,7 +369,7 @@ export default function ShoppingEditPage() {
                 return (
                   <div
                     key={item.id}
-                    className={`bg-white rounded-2xl p-3.5 shadow-sm border transition-all ${
+                    className={`group bg-white rounded-2xl p-3.5 shadow-sm border transition-all ${
                       item.isPurchased ? 'border-green-200 bg-green-50/40 opacity-90' : 'border-gray-100'
                     }`}
                     style={{ animation: `fadeInUp 0.4s ease-out ${idx * 0.05}s both` }}

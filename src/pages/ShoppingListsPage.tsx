@@ -73,6 +73,7 @@ export default function ShoppingListsPage() {
       <PageHeader
         title="采购清单"
         variant="primary"
+        showBack={true}
         right={
           <button
             onClick={handleCreateNew}

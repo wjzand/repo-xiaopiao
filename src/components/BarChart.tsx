@@ -103,7 +103,7 @@ export default function BarChart({
           ctx.fillText(`${v}${yUnit}`, x + barW / 2, y - 6);
         }
 
-        ctx.fillStyle = '#6B7280';
+        ctx.fillStyle = color;
         ctx.font = '10px -apple-system, "PingFang SC", sans-serif';
         ctx.textAlign = 'center';
         const label = labels[i].length > 5 ? labels[i].slice(0, 5) : labels[i];
@@ -132,7 +132,7 @@ export default function BarChart({
           ctx.fillText(`${v}${yUnit}`, x + barW + 8, y + barH / 2 + 4);
         }
 
-        ctx.fillStyle = '#374151';
+        ctx.fillStyle = color;
         ctx.font = '11px -apple-system, "PingFang SC", sans-serif';
         ctx.textAlign = 'right';
         const label = labels[i].length > 8 ? labels[i].slice(0, 7) + '…' : labels[i];
